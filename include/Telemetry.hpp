@@ -16,6 +16,6 @@ class DataLoader {
     public:
         DataLoader() = default;
         ~DataLoader() = default;
-    
-        std::vector<TelemetryPoint> loadCSV(const std::string& filepath);
+
+        const std::vector<TelemetryPoint> loadCSV(const std::string& filepath);
 };

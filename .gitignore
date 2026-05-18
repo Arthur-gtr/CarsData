@@ -3,3 +3,6 @@
 cache_f1
 
 *.csv
+*.o
+
+f1_telemetry

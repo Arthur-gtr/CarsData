@@ -6,7 +6,8 @@ CXXFLAGS    = -Wall -Wextra -Werror -std=c++20 -I./include
 SRC_DIR     = src
 OBJ_DIR     = obj
 
-SRC         = $(SRC_DIR)/main.cpp \
+SRC         = $(SRC_DIR)/main.cpp
+SRC			+= $(SRC_DIR)/DataLoader.cpp
 
 OBJ         = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
 
