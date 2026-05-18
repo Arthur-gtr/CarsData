@@ -1,23 +1,33 @@
 NAME        = f1_telemetry
 
 CC          = clang++
-CXXFLAGS    = -Wall -Wextra -Werror -std=c++20 -I./include
+CXXFLAGS    = -Wall -Wextra -std=c++20 -I./include -I./imgui -I./imgui/backends
+LDFLAGS     = -lglfw -lvulkan -ldl -lpthread
 
 SRC_DIR     = src
 OBJ_DIR     = obj
 
-SRC         = $(SRC_DIR)/main.cpp
-SRC			+= $(SRC_DIR)/DataLoader.cpp
 
-OBJ         = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
+IMGUI_SRC   = imgui/imgui.cpp \
+              imgui/imgui_draw.cpp \
+              imgui/imgui_tables.cpp \
+              imgui/imgui_widgets.cpp \
+              imgui/backends/imgui_impl_glfw.cpp \
+              imgui/backends/imgui_impl_vulkan.cpp
+
+SRC         = $(SRC_DIR)/main.cpp \
+              $(SRC_DIR)/DataLoader.cpp \
+              $(IMGUI_SRC)
+
+OBJ         = $(patsubst %.cpp, $(OBJ_DIR)/%.o, $(SRC))
 
 all: $(NAME)
 
 $(NAME): $(OBJ)
-	$(CC) $(OBJ) -o $(NAME)
+	$(CC) $(OBJ) -o $(NAME) $(LDFLAGS)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(OBJ_DIR)
+$(OBJ_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
 clean:
