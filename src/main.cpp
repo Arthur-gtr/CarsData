@@ -17,6 +17,7 @@
 struct CarState {
     TelemetryPoint current_data;
     bool is_running = true;
+    bool force_stop = false;
     std::mutex mtx;
 };
 
@@ -24,7 +25,17 @@ void replay_engine(const std::vector<TelemetryPoint>& data, CarState& state) {
     auto start_time = std::chrono::steady_clock::now();
     for (const auto& pt : data) {
         auto target_time = start_time + std::chrono::milliseconds(static_cast<long long>(pt.time_ms));
-        std::this_thread::sleep_until(target_time);
+        while (std::chrono::steady_clock::now() < target_time) {
+            {
+                std::lock_guard<std::mutex> lock(state.mtx);
+
+                if (state.force_stop) {
+                    state.is_running = false;
+                    return; 
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
         
         std::lock_guard<std::mutex> lock(state.mtx); 
         state.current_data = pt;
@@ -268,7 +279,8 @@ int main(int, char**) {
 
     DataLoader loader;
     std::vector<TelemetryPoint> telemetryData = loader.loadCSV("data/telemetry_VER_Monza.csv");
-    if (telemetryData.empty()) return EXIT_FAILURE;
+    if (telemetryData.empty())
+        return EXIT_FAILURE;
 
     CarState shared_state;
     shared_state.current_data = telemetryData[0]; 
@@ -352,6 +364,11 @@ int main(int, char**) {
             FrameRender(wd, draw_data);
             FramePresent(wd);
         }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(shared_state.mtx);
+        shared_state.force_stop = true;
     }
 
     engine_thread.join();
