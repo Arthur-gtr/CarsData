@@ -7,6 +7,8 @@ LDFLAGS     = -lglfw -lvulkan -ldl -lpthread
 SRC_DIR     = src
 OBJ_DIR     = obj
 
+SRC         = $(SRC_DIR)/main.cpp
+SRC			+= $(SRC_DIR)/DataLoader.cpp
 
 IMGUI_SRC   = imgui/imgui.cpp \
               imgui/imgui_draw.cpp \

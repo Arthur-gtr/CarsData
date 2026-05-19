@@ -13,6 +13,7 @@
 #include <thread>
 #include <mutex>
 #include <iomanip>
+#include <algorithm>
 
 struct CarState {
     TelemetryPoint current_data;
@@ -224,6 +225,55 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd) {
     wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->SemaphoreCount;
 }
 
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+#include <cmath>
+void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
+{
+    CarState* state = (CarState*)pDevice->pUserData;
+    float* pOutputF32 = (float*)pOutput;
+
+    int current_rpm = 0;
+    int current_throttle = 0;
+    {
+        std::lock_guard<std::mutex> lock(state->mtx);
+        current_rpm = state->current_data.rpm;
+        current_throttle = state->current_data.throttle;
+    }
+
+    if (current_rpm < 4000) current_rpm = 4000;
+
+    float f0 = (current_rpm / 60.0f) * 3.0f;
+    float volume = 0.05f + (current_throttle / 100.0f) * 0.15f;
+    float sampleRate = pDevice->sampleRate;
+
+    static float ph[4] = {0, 0, 0, 0};
+
+    const float weights[4] = { 0.5f, 0.35f, 0.1f, 0.05f };
+    const float freqs[4]   = { f0,   f0*2,  f0*3, f0*4  };
+
+    static float filtered_l = 0.0f;
+    static float filtered_r = 0.0f;
+    float alpha = 0.4f;
+
+    for (ma_uint32 i = 0; i < frameCount; ++i) {
+        float value = 0.0f;
+
+        for (int h = 0; h < 4; ++h) {
+            value += weights[h] * sinf(2.0f * M_PI * ph[h]);
+            ph[h] += freqs[h] / sampleRate;
+            if (ph[h] > 1.0f) ph[h] -= 1.0f;
+        }
+
+        value *= volume;
+        filtered_l = alpha * value + (1.0f - alpha) * filtered_l;
+        filtered_r = filtered_l;
+
+        pOutputF32[i * pDevice->playback.channels + 0] = filtered_l;
+        pOutputF32[i * pDevice->playback.channels + 1] = filtered_r;
+    }
+}
+
 int main(int, char**) {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) return 1;
@@ -289,6 +339,15 @@ int main(int, char**) {
 
     ImVec4 clear_color = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
 
+    ma_engine audio_engine;
+    ma_sound motor_sound;
+
+    ma_engine_init(NULL, &audio_engine);
+    ma_sound_init_from_file(&audio_engine, "sound/Formula1Sound.mp3",
+        MA_SOUND_FLAG_LOOPING, NULL, NULL, &motor_sound);
+    ma_sound_start(&motor_sound);
+
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -316,6 +375,14 @@ int main(int, char**) {
             display_data = shared_state.current_data;
             is_active = shared_state.is_running;
         }
+
+        float base_rpm = 8000.0f;
+        float pitch = std::clamp(display_data.rpm / base_rpm, 0.3f, 3.0f);
+        ma_sound_set_pitch(&motor_sound, pitch);
+
+
+        float volume = 0.3f + (display_data.throttle / 100.0f) * 0.7f;
+        ma_sound_set_volume(&motor_sound, volume);
 
         auto current_time = std::chrono::steady_clock::now();
         std::chrono::duration<double> elapsed_chrono = current_time - display_start_time;
@@ -373,8 +440,11 @@ int main(int, char**) {
 
     engine_thread.join();
 
+    
     err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
+    ma_sound_uninit(&motor_sound);
+    ma_engine_uninit(&audio_engine);
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
